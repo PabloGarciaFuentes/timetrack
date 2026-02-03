@@ -32,46 +32,72 @@ export function Reports() {
 
     // Fetch entries for current month
     useEffect(() => {
+        let mounted = true
+
         async function fetchEntries() {
-            if (!user) return
-            setLoading(true)
-
-            if (isDemo) {
-                // Demo mode logic
-                const start = startOfMonth(currentMonth)
-                start.setHours(0, 0, 0, 0)
-                const end = endOfMonth(currentMonth)
-                end.setHours(23, 59, 59, 999)
-
-                const filtered = DEMO_ENTRIES.filter(entry => {
-                    const entryDate = new Date(entry.date)
-                    return entryDate >= start && entryDate <= end
-                }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-
-                setEntries(filtered)
-                setLoading(false)
+            if (!user) {
+                if (mounted) setLoading(false)
                 return
             }
 
-            const start = startOfMonth(currentMonth)
-            const end = endOfMonth(currentMonth)
+            try {
+                if (mounted) setLoading(true)
 
-            const { data, error } = await supabase
-                .from('time_entries')
-                .select('*, pauses(*)')
-                .eq('user_id', user.id)
-                .gte('date', format(start, 'yyyy-MM-dd'))
-                .lte('date', format(end, 'yyyy-MM-dd'))
-                .order('date', { ascending: true })
+                if (isDemo) {
+                    // Demo mode logic
+                    const start = startOfMonth(currentMonth)
+                    start.setHours(0, 0, 0, 0)
+                    const end = endOfMonth(currentMonth)
+                    end.setHours(23, 59, 59, 999)
 
-            if (!error && data) {
-                setEntries(data as TimeEntry[])
+                    const filtered = DEMO_ENTRIES.filter(entry => {
+                        const entryDate = new Date(entry.date)
+                        return entryDate >= start && entryDate <= end
+                    }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+
+                    if (mounted) {
+                        setEntries(filtered)
+                        setLoading(false)
+                    }
+                    return
+                }
+
+                const start = startOfMonth(currentMonth)
+                const end = endOfMonth(currentMonth)
+
+                const { data, error } = await supabase
+                    .from('time_entries')
+                    .select('*, pauses(*)')
+                    .eq('user_id', user.id)
+                    .gte('date', format(start, 'yyyy-MM-dd'))
+                    .lte('date', format(end, 'yyyy-MM-dd'))
+                    .order('date', { ascending: true })
+
+                if (error) throw error
+
+                if (mounted) {
+                    setEntries(data as TimeEntry[])
+                }
+            } catch (error) {
+                console.error('Error fetching reports:', error)
+                if (mounted) {
+                    toast({
+                        title: 'Error',
+                        description: 'No se pudieron cargar los datos del reporte',
+                        variant: 'destructive',
+                    })
+                }
+            } finally {
+                if (mounted) setLoading(false)
             }
-            setLoading(false)
         }
 
         fetchEntries()
-    }, [user, currentMonth, isDemo])
+
+        return () => {
+            mounted = false
+        }
+    }, [user, currentMonth, isDemo, toast])
 
     // Calculate stats
     const monthlyStats = useMemo(() => getMonthlyStats(entries, currentMonth), [entries, currentMonth])

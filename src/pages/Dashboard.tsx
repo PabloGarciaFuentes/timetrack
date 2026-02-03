@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
-import { Zap, Heart, Activity, Timer, Coffee } from 'lucide-react'
+import { Zap, Activity, Timer, Coffee } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { StatsCard } from '@/components/dashboard/StatsCard'
 import { DonutChart } from '@/components/dashboard/DonutChart'
@@ -67,6 +67,22 @@ export function Dashboard() {
         ]
     }, [entries, weeklyStats, timeDistribution, state])
 
+    // Real-time values
+    const todayElapsedTime = state.elapsedTime
+    const todayPausedTime = state.pausedTime
+    const currentStatus = state.isWorking ? 'Trabajando' : state.isPaused ? 'Pausado' : 'Inactivo'
+
+    // Format helpers
+    const formatTime = (seconds: number) => {
+        const h = Math.floor(seconds / 3600)
+        const m = Math.floor((seconds % 3600) / 60)
+        return `${h}h ${m}m`
+    }
+
+    const startTime = state.currentEntry?.clock_in
+        ? new Date(state.currentEntry.clock_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        : '--:--'
+
     if (isLoading || trackingLoading) {
         return (
             <div className="flex items-center justify-center min-h-[400px]">
@@ -80,29 +96,32 @@ export function Dashboard() {
             {/* Top Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <StatsCard
-                    title="Energy Used"
-                    value={`${formatHours(weeklyStats.totalHours).replace('h', ',')}`}
-                    subtitle="kcal today"
-                    trend={5}
-                    icon={<Zap className="w-5 h-5 text-warning" />}
-                />
-                <StatsCard
-                    title="Heart Rate"
-                    value="62"
-                    subtitle="Avg: 78 Bpm"
-                    icon={<Heart className="w-5 h-5 text-destructive" />}
-                />
-                <StatsCard
-                    title="Wellness Index"
-                    value={`${Math.round(weeklyStats.averageDaily / 8 * 100)}%`}
-                    trend={10}
-                    icon={<Activity className="w-5 h-5 text-success" />}
-                />
-                <StatsCard
-                    title="Activity"
-                    value={`${weeklyStats.daysWorked}`}
-                    subtitle="días • Active"
+                    title="Tiempo Hoy"
+                    value={formatTime(todayElapsedTime)}
+                    subtitle="Tiempo activo"
                     icon={<Timer className="w-5 h-5 text-primary" />}
+                    variant="primary"
+                />
+                <StatsCard
+                    title="Inicio Jornada"
+                    value={startTime}
+                    subtitle={state.currentEntry ? 'Entrada registrada' : 'Sin registro actual'}
+                    icon={<Zap className="w-5 h-5 text-warning" />}
+                    variant="warning"
+                />
+                <StatsCard
+                    title="Descanso Total"
+                    value={formatTime(todayPausedTime)}
+                    subtitle="Pausas tomadas"
+                    icon={<Coffee className="w-5 h-5 text-secondary" />}
+                    variant="secondary"
+                />
+                <StatsCard
+                    title="Estado Actual"
+                    value={currentStatus}
+                    subtitle="En tiempo real"
+                    icon={<Activity className={`w-5 h-5 ${state.isWorking ? 'text-success' : state.isPaused ? 'text-warning' : 'text-muted-foreground'}`} />}
+                    variant={state.isWorking ? 'success' : 'default'}
                 />
             </div>
 

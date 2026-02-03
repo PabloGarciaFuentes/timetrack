@@ -42,55 +42,81 @@ export function History() {
 
     // Fetch entries
     useEffect(() => {
+        let mounted = true
+
         async function fetchEntries() {
-            if (!user) return
-            setLoading(true)
-
-            if (isDemo) {
-                // Filter demo entries based on date range
-                let filtered = DEMO_ENTRIES
-
-                if (dateRange) {
-                    filtered = DEMO_ENTRIES.filter(entry => {
-                        const entryDate = new Date(entry.date)
-                        // Add some buffer to ensure inclusive matching
-                        const start = new Date(dateRange.start)
-                        start.setHours(0, 0, 0, 0)
-                        const end = new Date(dateRange.end)
-                        end.setHours(23, 59, 59, 999)
-
-                        return entryDate >= start && entryDate <= end
-                    })
-                }
-
-                // Sort by date descending
-                setEntries(filtered.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()))
-                setLoading(false)
+            if (!user) {
+                if (mounted) setLoading(false)
                 return
             }
 
-            let query = supabase
-                .from('time_entries')
-                .select('*, pauses(*)')
-                .eq('user_id', user.id)
-                .order('date', { ascending: false })
+            try {
+                if (mounted) setLoading(true)
 
-            if (dateRange) {
-                query = query
-                    .gte('date', format(dateRange.start, 'yyyy-MM-dd'))
-                    .lte('date', format(dateRange.end, 'yyyy-MM-dd'))
+                if (isDemo) {
+                    // Filter demo entries based on date range
+                    let filtered = DEMO_ENTRIES
+
+                    if (dateRange) {
+                        filtered = DEMO_ENTRIES.filter(entry => {
+                            const entryDate = new Date(entry.date)
+                            // Add some buffer to ensure inclusive matching
+                            const start = new Date(dateRange.start)
+                            start.setHours(0, 0, 0, 0)
+                            const end = new Date(dateRange.end)
+                            end.setHours(23, 59, 59, 999)
+
+                            return entryDate >= start && entryDate <= end
+                        })
+                    }
+
+                    // Sort by date descending
+                    if (mounted) {
+                        setEntries(filtered.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()))
+                        setLoading(false)
+                    }
+                    return
+                }
+
+                let query = supabase
+                    .from('time_entries')
+                    .select('*, pauses(*)')
+                    .eq('user_id', user.id)
+                    .order('date', { ascending: false })
+
+                if (dateRange) {
+                    query = query
+                        .gte('date', format(dateRange.start, 'yyyy-MM-dd'))
+                        .lte('date', format(dateRange.end, 'yyyy-MM-dd'))
+                }
+
+                const { data, error } = await query.limit(100)
+
+                if (error) throw error
+
+                if (mounted) {
+                    setEntries(data as TimeEntry[])
+                }
+            } catch (error) {
+                console.error('Error fetching history:', error)
+                if (mounted) {
+                    toast({
+                        title: 'Error',
+                        description: 'No se pudieron cargar los registros históricos',
+                        variant: 'destructive',
+                    })
+                }
+            } finally {
+                if (mounted) setLoading(false)
             }
-
-            const { data, error } = await query.limit(100)
-
-            if (!error && data) {
-                setEntries(data as TimeEntry[])
-            }
-            setLoading(false)
         }
 
         fetchEntries()
-    }, [user, dateRange, isDemo])
+
+        return () => {
+            mounted = false
+        }
+    }, [user, dateRange, isDemo, toast])
 
     // Group entries by date
     const groupedEntries = useMemo(() => {
