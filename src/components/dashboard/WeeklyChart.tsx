@@ -58,13 +58,13 @@ export function WeeklyChart({ data, title = 'Sleep Analysis' }: WeeklyChartProps
                         <p className="text-2xl font-bold text-success">
                             85<span className="text-sm font-normal text-muted-foreground">%</span>
                         </p>
-                        <p className="text-xs text-muted-foreground">Sleep Efficiency</p>
+                        <p className="text-xs text-muted-foreground">Work Efficiency</p>
                     </div>
                     <div>
                         <p className="text-2xl font-bold">
                             7h 15m
                         </p>
-                        <p className="text-xs text-muted-foreground">Sleep Duration</p>
+                        <p className="text-xs text-muted-foreground">Work Duration</p>
                     </div>
                 </div>
 

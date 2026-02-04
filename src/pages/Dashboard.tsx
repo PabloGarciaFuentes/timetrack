@@ -9,7 +9,7 @@ import { CurrentStatus } from '@/components/time-tracking/CurrentStatus'
 import { useTimeTracking } from '@/hooks/useTimeTracking'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
-import { getWeeklyStats, calculateTimeDistribution } from '@/lib/calculations'
+import { getWeeklyStats } from '@/lib/calculations'
 import { formatHours } from '@/lib/utils'
 import type { TimeEntry } from '@/types'
 
@@ -53,23 +53,67 @@ export function Dashboard() {
 
     // Calculate stats
     const weeklyStats = useMemo(() => getWeeklyStats(entries), [entries])
-    const timeDistribution = useMemo(() => calculateTimeDistribution(entries), [entries])
 
-    // Activity breakdown
+    // Get today's date string
+    const todayDateStr = new Date().toISOString().split('T')[0]
+
+    // Calculate TODAY's total work time across ALL sessions + current active session
+    const todayTotalWorkSeconds = useMemo(() => {
+        // Sum completed entries for today
+        const completedTodayEntries = entries.filter(
+            e => e.date === todayDateStr && e.status === 'completed'
+        )
+
+        const completedWorkSeconds = completedTodayEntries.reduce((sum, entry) => {
+            const hours = entry.total_hours || 0
+            return sum + hours * 3600
+        }, 0)
+
+        // Add current session elapsed time (minus pauses)
+        const currentSessionWorkSeconds = state.currentEntry
+            ? state.elapsedTime - state.pausedTime
+            : 0
+
+        return completedWorkSeconds + currentSessionWorkSeconds
+    }, [entries, todayDateStr, state.currentEntry, state.elapsedTime, state.pausedTime])
+
+    // Calculate TODAY's total pause time across ALL sessions + current active session
+    const todayTotalPauseSeconds = useMemo(() => {
+        // Sum completed entries' pauses for today
+        const todayEntries = entries.filter(e => e.date === todayDateStr)
+
+        const completedPauseSeconds = todayEntries.reduce((sum, entry) => {
+            // Skip current entry pauses (handled separately)
+            if (state.currentEntry && entry.id === state.currentEntry.id) return sum
+
+            const pauseSeconds = (entry.pauses || [])
+                .filter(p => p.end_time)
+                .reduce((pSum, p) => {
+                    const start = new Date(p.start_time).getTime()
+                    const end = new Date(p.end_time!).getTime()
+                    return pSum + (end - start) / 1000
+                }, 0)
+            return sum + pauseSeconds
+        }, 0)
+
+        // Add current session pause time
+        return completedPauseSeconds + state.pausedTime
+    }, [entries, todayDateStr, state.currentEntry, state.pausedTime])
+
+    // Real-time activity data for DonutChart - Only today's data
     const activityData = useMemo(() => {
-        const todayEntry = entries.find(e => e.date === new Date().toISOString().split('T')[0])
-        const hoursToday = todayEntry?.total_hours || (state.elapsedTime - state.pausedTime) / 3600
+        const hoursToday = todayTotalWorkSeconds / 3600
+        const pauseHoursToday = todayTotalPauseSeconds / 3600
 
         return [
-            { name: 'Hoy', value: Math.round(hoursToday * 10) / 10, color: 'hsl(217, 91%, 60%)' },
-            { name: 'Semana', value: Math.round(weeklyStats.totalHours * 10) / 10, color: 'hsl(160, 84%, 39%)' },
-            { name: 'Pausas', value: Math.round(timeDistribution.pauseHours * 10) / 10, color: 'hsl(38, 92%, 50%)' },
+            { name: 'Trabajo', value: Math.round(hoursToday * 10) / 10, color: 'hsl(217, 91%, 60%)' },
+            { name: 'Pausas', value: Math.round(pauseHoursToday * 10) / 10, color: 'hsl(38, 92%, 50%)' },
         ]
-    }, [entries, weeklyStats, timeDistribution, state])
+    }, [todayTotalWorkSeconds, todayTotalPauseSeconds])
 
-    // Real-time values
-    const todayElapsedTime = state.elapsedTime
-    const todayPausedTime = state.pausedTime
+    // Real-time values for Activity card
+    const todayWorkHours = todayTotalWorkSeconds / 3600
+    const todayPauseHours = todayTotalPauseSeconds / 3600
     const currentStatus = state.isWorking ? 'Trabajando' : state.isPaused ? 'Pausado' : 'Inactivo'
 
     // Format helpers
@@ -97,7 +141,7 @@ export function Dashboard() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <StatsCard
                     title="Tiempo Hoy"
-                    value={formatTime(todayElapsedTime)}
+                    value={formatTime(todayTotalWorkSeconds)}
                     subtitle="Tiempo activo"
                     icon={<Timer className="w-5 h-5 text-primary" />}
                     variant="primary"
@@ -111,7 +155,7 @@ export function Dashboard() {
                 />
                 <StatsCard
                     title="Descanso Total"
-                    value={formatTime(todayPausedTime)}
+                    value={formatTime(todayTotalPauseSeconds)}
                     subtitle="Pausas tomadas"
                     icon={<Coffee className="w-5 h-5 text-secondary" />}
                     variant="secondary"
@@ -132,7 +176,7 @@ export function Dashboard() {
                     <DonutChart
                         data={activityData}
                         title="Distribución de Tiempo"
-                        centerValue={formatHours(timeDistribution.totalHours)}
+                        centerValue={formatHours(todayWorkHours + todayPauseHours)}
                         centerLabel="Total"
                     />
 
@@ -149,7 +193,7 @@ export function Dashboard() {
                                     </div>
                                     <span className="text-sm">Trabajando</span>
                                 </div>
-                                <span className="text-sm font-medium">{formatHours(timeDistribution.workHours)}</span>
+                                <span className="text-sm font-medium">{formatHours(todayWorkHours)}</span>
                             </div>
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-3">
@@ -158,7 +202,7 @@ export function Dashboard() {
                                     </div>
                                     <span className="text-sm">Pausas</span>
                                 </div>
-                                <span className="text-sm font-medium">{formatHours(timeDistribution.pauseHours)}</span>
+                                <span className="text-sm font-medium">{formatHours(todayPauseHours)}</span>
                             </div>
                         </CardContent>
                     </Card>
@@ -173,7 +217,7 @@ export function Dashboard() {
                     </Card>
 
                     <Card className="border-0 shadow-lg">
-                        <CardContent className="p-8">
+                        <CardContent className="p-6">
                             <TimeClockControls />
                         </CardContent>
                     </Card>

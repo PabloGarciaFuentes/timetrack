@@ -22,7 +22,7 @@ export function Layout() {
             <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
             {/* Main content */}
-            <div className="lg:ml-64">
+            <div className="lg:ml-60">
                 <Header
                     title={title}
                     subtitle={subtitle}
